@@ -16,6 +16,7 @@ import locale
 locale.setlocale(locale.LC_ALL, '')
 
 exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Image-ExifTool', 'exiftool')
+# exiftool_location = r"C:\Users\MiniKodjo\AppData\Local\Programs\ExifTool\ExifTool.exe"
 EXIF_TOOL_BATCH_SIZE = 50
 
 class ExifTool(object):
@@ -115,16 +116,16 @@ def validate_parsed_date(parsed_date):
     #TODO check if date is correct, > 1900 etc...
     return parsed_date
 
-def log_ignored_file(file_path, log_file):
-    with open(log_file, 'a') as log:
-        log.write(file_path + '\n')
 
-def organize_files(src_dir, dest_dir, dry_run=True, move=False, log_file='ignored_files.log', max_workers=1):
+def organize_files(src_dir, dest_dir, dry_run=True, move=False, ignore_dirs=None):
     # Clear the log file
 
     exif_batch_paths = []
     dry_run_history = {} if dry_run else None # destination to source map
-    for root, dirs, files in os.walk(src_dir):
+    for root, dirs, files in os.walk(src_dir, topdown=True):
+        if ignore_dirs:
+            dirs[:] = [d for d in dirs if d not in ignore_dirs]
+
         for filename in files:
             file_path = os.path.join(root, filename)
             date_taken = parse_filename(filename)
@@ -134,22 +135,21 @@ def organize_files(src_dir, dest_dir, dry_run=True, move=False, log_file='ignore
                 if len(exif_batch_paths) >= EXIF_TOOL_BATCH_SIZE:
                     dates_taken = get_date_taken_batch(exif_batch_paths)
                     for path, date in zip(exif_batch_paths, dates_taken):
-                        process_file(path, date, dest_dir, dry_run, move, log_file, dry_run_history)
+                        process_file(path, date, dest_dir, dry_run, move,  dry_run_history)
                     exif_batch_paths.clear()
                 continue
             
-            process_file(file_path, date_taken, dest_dir, dry_run, move, log_file, dry_run_history)
+            process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_history)
     
     # Process remaining files in the batch
     if exif_batch_paths:
         dates_taken = get_date_taken_batch(exif_batch_paths)
         for path, date in zip(exif_batch_paths, dates_taken):
-            process_file(path, date, dest_dir, dry_run, move, log_file, dry_run_history)
+            process_file(path, date, dest_dir, dry_run, move,  dry_run_history)
 
-def process_file(file_path, date_taken, dest_dir, dry_run, move, log_file, dry_run_history):
+def process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_history):
     if not date_taken:
         print(f"nodate {file_path}")
-        log_ignored_file(file_path, log_file)
         return
 
     year = date_taken.strftime('%Y')
@@ -204,7 +204,8 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Perform a dry run without making changes.")
     parser.add_argument("--move", action="store_true", help="Move files instead of copying.")
     parser.add_argument("--log-file", default='ignored_files.log', help="Log file to record ignored files.")
+    parser.add_argument("--ignore-dirs", action='append', help="Directory names to ignore.", default=[])
 
     args = parser.parse_args()
     
-    organize_files(args.src_dir, args.dest_dir, dry_run=args.dry_run, move=args.move, log_file=args.log_file)
+    organize_files(args.src_dir, args.dest_dir, dry_run=args.dry_run, move=args.move, ignore_dirs=args.ignore_dirs)
