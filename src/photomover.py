@@ -1,4 +1,5 @@
 import os
+import filecmp
 import shutil
 import re
 import sys
@@ -81,11 +82,18 @@ def parse_filename(filename):
                 continue
     return None
 
-def resolve_duplicate(new_path, dry_run_results = None):
+def resolve_duplicate(new_path, source_path, dry_run_history = None):
     base, extension = os.path.splitext(new_path)
     counter = 1
+    while (dry_run_history and new_path in dry_run_history) or (not dry_run_history and os.path.exists(new_path)):
+                ## compare files
+        if dry_run_history:
+            dest_compare = dry_run_history[new_path] # Get the source for comparison, because dry-run mode doesnt change file-system
+        else:
+            dest_compare = new_path
+        if filecmp.cmp(source_path, dest_compare):  # check for identical files
+            return None
 
-    while (dry_run_results and new_path in dry_run_results) or (not dry_run_results and os.path.exists(new_path)):
         new_path = f"{base}_{counter}{extension}"
         counter += 1
     return new_path
@@ -107,14 +115,9 @@ def get_date_taken(filepath):
     return None
 
 def validate_parsed_date(parsed_date):
-    if not parsed_date: None
-    # try converting it (some "valid" dates are way before 1900 and cannot be parsed by strtime later)
-    try:
-        parsed_date.strftime('%Y/%m-%b')  # any format with year, month, day, would work here.
-        return parsed_date
-    except ValueError:
-        return None  # errors in time format
-
+    #TODO check if date is correct, > 1900 etc...
+    return parsed_date
+    
 def log_ignored_file(file_path, log_file):
     with open(log_file, 'a') as log:
         log.write(file_path + '\n')
@@ -125,7 +128,7 @@ def organize_files(src_dir, dest_dir, dry_run=True, move=False, log_file='ignore
     
     exif_batch_paths = []
     if dry_run:
-        dry_run_results = {}
+        dry_run_history = {} # ddestination to source map
     for root, dirs, files in os.walk(src_dir):
         for filename in files:
             file_path = os.path.join(root, filename)
@@ -144,22 +147,23 @@ def organize_files(src_dir, dest_dir, dry_run=True, move=False, log_file='ignore
             month = date_taken.strftime('%m') + '-' + date_taken.strftime('%b').lower()
             new_dir = os.path.join(dest_dir, year, month)
             new_path = os.path.join(new_dir, filename)
-            
-            dry_run_results[file_path] = new_path
 
-            new_path = resolve_duplicate(new_path, dry_run_results)
+            fixed_new_path = resolve_duplicate(new_path, file_path, dry_run_history)
    
-            if not dry_run:
-                if not os.path.exists(new_dir):
-                    os.makedirs(new_dir)
-                
-                if move:
-                    shutil.move(file_path, new_path)
-                else:
-                    shutil.copy2(file_path, new_path)
+            if not fixed_new_path:
+                print(f"identical {file_path} to {new_path}")
             else:
-                dry_run_results[file_path] = new_path
-                print(f"{'move' if move else 'copy'} {file_path} to {new_path}")
+                if not dry_run:
+                    if not os.path.exists(new_dir):
+                        os.makedirs(new_dir)
+                    
+                    if move:
+                        shutil.move(file_path, fixed_new_path)
+                    else:
+                        shutil.copy2(file_path, fixed_new_path)
+                else:
+                    dry_run_history[fixed_new_path] = file_path
+                    print(f"{'move' if move else 'copy'} {file_path} to {fixed_new_path}")
 
 if __name__ == "__main__":
     import argparse
