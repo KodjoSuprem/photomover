@@ -14,6 +14,7 @@ locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
 
 exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Image-ExifTool', 'exiftool')
 exiftool_location = r"C:\Users\MiniKodjo\AppData\Local\Programs\ExifTool\ExifTool.exe"
+EXIF_TOOL_BATCH_SIZE = 50
 
 class ExifTool(object):
     """Used to run ExifTool from Python and keep it open"""
@@ -51,11 +52,11 @@ class ExifTool(object):
             output += increment.decode('utf-8')
         return output.rstrip(' \t\n\r')[:-len(self.sentinel)]
 
-    def get_metadata(self, filepath):
+    def get_metadata(self, filepaths):
         args = ['-j', '-a', '-G']
         args += ['-time:all']
         args += ['-r']
-        args += [filepath]
+        args += filepaths
         try:
             return json.loads(self.execute(*args))
         except ValueError:
@@ -125,45 +126,80 @@ def log_ignored_file(file_path, log_file):
 def organize_files(src_dir, dest_dir, dry_run=True, move=False, log_file='ignored_files.log'):
     # Clear the log file
     open(log_file, 'w').close()
-    
+
     exif_batch_paths = []
-    if dry_run:
-        dry_run_history = {} # ddestination to source map
+    dry_run_history = None if dry_run else {} # destination to source map
     for root, dirs, files in os.walk(src_dir):
         for filename in files:
             file_path = os.path.join(root, filename)
             date_taken = parse_filename(filename)
-            
+
             if not date_taken:
                 exif_batch_paths.append(file_path)
-                date_taken = get_date_taken(file_path)
-            
-            if not date_taken:
-                print(f"Could not determine date for file: {filename}")
-                log_ignored_file(file_path, log_file)
+                if len(exif_batch_paths) >= EXIF_TOOL_BATCH_SIZE:
+                    dates_taken = get_date_taken_batch(exif_batch_paths)
+                    for path, date in zip(exif_batch_paths, dates_taken):
+                        process_file(path, date, dest_dir, dry_run, move, log_file, dry_run_history)
+                    exif_batch_paths.clear()
                 continue
             
-            year = date_taken.strftime('%Y')
-            month = date_taken.strftime('%m') + '-' + date_taken.strftime('%b').lower()
-            new_dir = os.path.join(dest_dir, year, month)
-            new_path = os.path.join(new_dir, filename)
+            process_file(file_path, date_taken, dest_dir, dry_run, move, log_file, dry_run_history)
+    
+    # Process remaining files in the batch
+    if exif_batch_paths:
+        dates_taken = get_date_taken_batch(exif_batch_paths)
+        for path, date in zip(exif_batch_paths, dates_taken):
+            process_file(path, date, dest_dir, dry_run, move, log_file, dry_run_history)
 
-            fixed_new_path = resolve_duplicate(new_path, file_path, dry_run_history)
-   
-            if not fixed_new_path:
-                print(f"identical {file_path} to {new_path}")
+def process_file(file_path, date_taken, dest_dir, dry_run, move, log_file, dry_run_history):
+    if not date_taken:
+        print(f"nodate {file_path}")
+        log_ignored_file(file_path, log_file)
+        return
+
+    year = date_taken.strftime('%Y')
+    month = date_taken.strftime('%m') + '-' + date_taken.strftime('%b').lower()
+    new_dir = os.path.join(dest_dir, year, month)
+    new_path = os.path.join(new_dir, os.path.basename(file_path))
+
+    fixed_new_path = resolve_duplicate(new_path, file_path, dry_run_history)
+
+    if not fixed_new_path:
+        print(f"identical {file_path} to {new_path}")
+        if not move:
+            os.remove(file_path)
+    else:
+        if not dry_run:
+            if not os.path.exists(new_dir):
+                os.makedirs(new_dir)
+
+            if move:
+                shutil.move(file_path, fixed_new_path)
             else:
-                if not dry_run:
-                    if not os.path.exists(new_dir):
-                        os.makedirs(new_dir)
-                    
-                    if move:
-                        shutil.move(file_path, fixed_new_path)
-                    else:
-                        shutil.copy2(file_path, fixed_new_path)
-                else:
-                    dry_run_history[fixed_new_path] = file_path
-                    print(f"{'move' if move else 'copy'} {file_path} to {fixed_new_path}")
+                shutil.copy2(file_path, fixed_new_path)
+        else:
+            dry_run_history[fixed_new_path] = file_path
+        print(f"{'move' if move else 'copy'} {file_path} to {fixed_new_path}")
+
+def get_date_taken_batch(filepaths):
+    dates_taken = []
+    with ExifTool() as e:
+        metadata_list = e.get_metadata(filepaths)
+        for metadata in metadata_list:
+            date_taken = None
+            date_tags = ['EXIF:DateTimeOriginal', 'QuickTime:CreateDate', 'QuickTime:CreationDate']
+            for tag in date_tags:
+                date_str = metadata.get(tag)
+                if date_str:
+                    try:
+                        date_taken = datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
+                    except ValueError:
+                        date_taken = dateparser.parse(date_str)
+                    if date_taken:
+                        date_taken = validate_parsed_date(date_taken)
+                        break
+            dates_taken.append(date_taken)
+    return dates_taken
 
 if __name__ == "__main__":
     import argparse
