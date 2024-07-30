@@ -1,0 +1,17 @@
+# Photo and Video Organizer
+
+This script organizes photos and videos by year and month. It can use filenames or EXIF metadata to determine the date the media was created.
+It supports dry run, copy, and move modes.
+
+## Features
+
+- **Organize by Date**: Sorts files into directories by year and month.
+- **EXIF Metadata Support**: Uses EXIF metadata to get the creation date if the filename does not contain it.
+- **Duplicate Handling**: Resolves duplicate filenames by appending a counter.
+- **Dry Run Mode**: Simulates the organization without making any changes.
+- **Logging**: Logs files that could not be processed to a specified log file.
+
+## Requirements
+
+- Python 3.x
+- `ExifTool`
