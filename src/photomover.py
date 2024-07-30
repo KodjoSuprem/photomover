@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# encoding: utf-8
+
 import os
 import filecmp
 import shutil
@@ -10,10 +13,9 @@ from pathlib import Path
 import locale
 
 # Setting locale to the 'local' value
-locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+locale.setlocale(locale.LC_ALL, '')
 
 exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Image-ExifTool', 'exiftool')
-exiftool_location = r"C:\Users\MiniKodjo\AppData\Local\Programs\ExifTool\ExifTool.exe"
 EXIF_TOOL_BATCH_SIZE = 50
 
 class ExifTool(object):
@@ -26,11 +28,8 @@ class ExifTool(object):
         self.verbose = verbose
 
     def __enter__(self):
-    #     self.process = subprocess.Popen(
-    #         ['perl', self.executable, "-stay_open", "True", "-@", "-"],
-    #         stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         self.process = subprocess.Popen(
-            [self.executable, "-stay_open", "True", "-@", "-"],
+            ['perl', self.executable, "-stay_open", "True", "-@", "-"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         return self
 
@@ -39,7 +38,6 @@ class ExifTool(object):
         self.process.stdin.flush()
 
     def execute(self, *args):
-     
         args = args + ("-execute\n",)
         self.process.stdin.write(str.join("\n", args).encode('utf-8'))
         self.process.stdin.flush()
@@ -62,7 +60,6 @@ class ExifTool(object):
         except ValueError:
             sys.stdout.write('No files to parse or invalid data\n')
             exit()
-
 
 def parse_filename(filename):
     date_patterns = [
@@ -87,9 +84,9 @@ def resolve_duplicate(new_path, source_path, dry_run_history = None):
     base, extension = os.path.splitext(new_path)
     counter = 1
     while (dry_run_history and new_path in dry_run_history) or (not dry_run_history and os.path.exists(new_path)):
-                ## compare files
+        ## compare files
         if dry_run_history:
-            dest_compare = dry_run_history[new_path] # Get the source for comparison, because dry-run mode doesnt change file-system
+            dest_compare = dry_run_history[new_path]  # Get the source for comparison, because dry-run mode doesnt change file-system
         else:
             dest_compare = new_path
         if filecmp.cmp(source_path, dest_compare):  # check for identical files
@@ -98,7 +95,6 @@ def resolve_duplicate(new_path, source_path, dry_run_history = None):
         new_path = f"{base}_{counter}{extension}"
         counter += 1
     return new_path
-
 
 def get_date_taken(filepath):
     with ExifTool() as e:
@@ -118,17 +114,16 @@ def get_date_taken(filepath):
 def validate_parsed_date(parsed_date):
     #TODO check if date is correct, > 1900 etc...
     return parsed_date
-    
+
 def log_ignored_file(file_path, log_file):
     with open(log_file, 'a') as log:
         log.write(file_path + '\n')
 
-def organize_files(src_dir, dest_dir, dry_run=True, move=False, log_file='ignored_files.log'):
+def organize_files(src_dir, dest_dir, dry_run=True, move=False, log_file='ignored_files.log', max_workers=1):
     # Clear the log file
-    open(log_file, 'w').close()
 
     exif_batch_paths = []
-    dry_run_history = None if dry_run else {} # destination to source map
+    dry_run_history = {} if dry_run else None # destination to source map
     for root, dirs, files in os.walk(src_dir):
         for filename in files:
             file_path = os.path.join(root, filename)
@@ -166,13 +161,12 @@ def process_file(file_path, date_taken, dest_dir, dry_run, move, log_file, dry_r
 
     if not fixed_new_path:
         print(f"identical {file_path} to {new_path}")
-        if not move:
+        if move:
             os.remove(file_path)
     else:
         if not dry_run:
             if not os.path.exists(new_dir):
                 os.makedirs(new_dir)
-
             if move:
                 shutil.move(file_path, fixed_new_path)
             else:
@@ -194,7 +188,7 @@ def get_date_taken_batch(filepaths):
                     try:
                         date_taken = datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
                     except ValueError:
-                        date_taken = dateparser.parse(date_str)
+                        date_taken = None
                     if date_taken:
                         date_taken = validate_parsed_date(date_taken)
                         break
