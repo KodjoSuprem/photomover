@@ -11,4 +11,4 @@ RUN mkdir /usr/bin/Image-ExifTool
 RUN ln -s /usr/bin/exiftool /usr/bin/Image-ExifTool
 USER python
 
-ENTRYPOINT ["/usr/bin/photomover.py"]
+ENTRYPOINT ["python", "/usr/bin/photomover.py"]
