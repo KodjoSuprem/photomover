@@ -9,14 +9,13 @@ It supports dry run, copy, and move modes.
 - **EXIF Metadata Support**: Uses EXIF metadata to get the creation date if the filename does not contain it.
 - **Duplicate Handling**: Resolves duplicate filenames by appending a counter.
 - **Dry Run Mode**: Simulates the organization without making any changes.
-- **Logging**: Logs files that could not be processed to a specified log file.
-
+- **Directory ignore**: Ignores folder names wherever they are in the tree
 ## Requirements
 
 - Python 3.x
 - `ExifTool`
 
-## Exemple with docker
+## Usgage exemple with docker
 ```bash
 docker run -v "/volume1/Photos:/photos:ro" -v "/volume1/Photos-sorted:/photos-sorted" photomover --dry-run /photos /photos-sorted --ignore-dirs @eaDir  --ignore-dirs "#recycle"
 ```
