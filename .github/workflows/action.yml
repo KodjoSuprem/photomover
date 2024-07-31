@@ -1,0 +1,35 @@
+name: Deploy Images to GHCR
+
+env:
+  DOTNET_VERSION: '6.0.x'
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  push-sortphotos-image:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: '.'
+    steps:
+      - name: 'Checkout GitHub Action'
+        uses: actions/checkout@main
+
+      - name: 'Login to GitHub Container Registry'
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{github.actor}}
+          password: ${{secrets.GHCR_SECRET}}
+
+      - name: 'Build Inventory Image'
+        run: |
+          docker build . --tag ghcr.io/kodjosuprem/photomover:latest
+          docker push ghcr.io/kodjosuprem/photomover:latest
+
+
+          
