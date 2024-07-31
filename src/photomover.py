@@ -19,6 +19,8 @@ exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'I
 # exiftool_location = r"C:\Users\MiniKodjo\AppData\Local\Programs\ExifTool\ExifTool.exe"
 EXIF_TOOL_BATCH_SIZE = 50
 
+stats = { "processed": 0, "nodate": 0, "duplicates": 0, "renamed": 0}
+
 class ExifTool(object):
     """Used to run ExifTool from Python and keep it open"""
 
@@ -146,9 +148,11 @@ def organize_files(src_dir, dest_dir, dry_run=True, move=False, ignore_dirs=None
         dates_taken = get_date_taken_batch(exif_batch_paths)
         for path, date in zip(exif_batch_paths, dates_taken):
             process_file(path, date, dest_dir, dry_run, move,  dry_run_history)
+    
 
 def process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_history):
     if not date_taken:
+        stats["nodate"] += 1
         print(f"nodate {file_path}")
         return
 
@@ -158,12 +162,15 @@ def process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_histor
     new_path = os.path.join(new_dir, os.path.basename(file_path))
 
     fixed_new_path = resolve_duplicate(new_path, file_path, dry_run_history)
-
+    if new_path != fixed_new_path:
+        stats["renamed"] += 1
     if not fixed_new_path:
+        stats["duplicates"] += 1
         print(f"identical {file_path} to {new_path}")
         if move:
             os.remove(file_path)
     else:
+        stats["processed"] += 1
         if not dry_run:
             if not os.path.exists(new_dir):
                 os.makedirs(new_dir)
@@ -174,6 +181,8 @@ def process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_histor
         else:
             dry_run_history[fixed_new_path] = file_path
         print(f"{'move' if move else 'copy'} {file_path} to {fixed_new_path}")
+
+
 
 def get_date_taken_batch(filepaths):
     dates_taken = []
@@ -208,4 +217,18 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
+    #measure script execution duration
+    start_time = datetime.now()
     organize_files(args.src_dir, args.dest_dir, dry_run=args.dry_run, move=args.move, ignore_dirs=args.ignore_dirs)
+    #print execution duration
+    end_time = datetime.now()
+    execution_time = end_time - start_time
+    print(f"Execution time: {execution_time}")
+
+
+    #print stats
+    print(f"Processed: {stats['processed']}")
+    print(f"No Date: {stats['nodate']}")
+    print(f"Duplicates: {stats['duplicates']}")
+    print(f"Total: {stats['processed'] + stats['nodate'] + stats['duplicates']}")
+
