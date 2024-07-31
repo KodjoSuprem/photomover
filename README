@@ -16,3 +16,7 @@ It supports dry run, copy, and move modes.
 - Python 3.x
 - `ExifTool`
 
+## Exemple with docker
+```bash
+docker run -v "/volume1/Photos:/photos:ro" -v "/volume1/Photos-sorted:/photos-sorted" photomover --dry-run /photos /photos-sorted --ignore-dirs @eaDir  --ignore-dirs "#recycle"
+```
