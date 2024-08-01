@@ -209,7 +209,6 @@ if __name__ == "__main__":
     parser.add_argument("dest_dir", help="Destination directory for organized files.")
     parser.add_argument("--dry-run", action="store_true", help="Perform a dry run without making changes.")
     parser.add_argument("--move", action="store_true", help="Move files instead of copying.")
-    parser.add_argument("--log-file", default='ignored_files.log', help="Log file to record ignored files.")
     parser.add_argument("--ignore-dirs", action='append', help="Directory names to ignore.", default=[])
     parser.add_argument("--no-date-dir", default='unknown-date', help="Log file to record ignored files.")
 
