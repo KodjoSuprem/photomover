@@ -16,8 +16,7 @@ import locale
 locale.setlocale(locale.LC_ALL, '')
 
 exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Image-ExifTool', 'exiftool')
-# exiftool_location = r"C:\Users\MiniKodjo\AppData\Local\Programs\ExifTool\ExifTool.exe"
-EXIF_TOOL_BATCH_SIZE = 50
+EXIF_TOOL_BATCH_SIZE = 100
 
 stats = { "processed": 0, "nodate": 0, "duplicates": 0, "renamed": 0}
 
@@ -66,13 +65,13 @@ class ExifTool(object):
 
 def parse_filename(filename):
     date_patterns = [
-        (r'(\d{4}[-_]\d{2}[-_]\d{2})', lambda d: datetime.strptime(d, '%Y-%m-%d') if '-' in d else datetime.strptime(d, '%Y_%m_%d')),  # YYYY-MM-DD or YYYY_MM_DD
-        (r'(\d{8})', lambda d: datetime.strptime(d, '%Y%m%d')),  # YYYYMMDD
-        (r'(\d{4}[-_]\d{2}[-_]\d{2}[-_]\d{2}[-_]\d{2}[-_]\d{2})', lambda d: datetime.strptime(d, '%Y-%m-%d-%H-%M-%S') if '-' in d else datetime.strptime(d, '%Y_%m_%d_%H_%M_%S')),  # YYYY-MM-DD-HH-MM-SS or YYYY_MM_DD_HH_MM_SS
-        (r'(\d{14})', lambda d: datetime.strptime(d, '%Y%m%d%H%M%S')),  # YYYYMMDDHHMMSS
-        (r'(\d{8}_\d{6})', lambda d: datetime.strptime(d, '%Y%m%d_%H%M%S'))  # YYYYMMDD_HHMMSS
+        (r'[^0-9]*(\d{4}[-_]\d{2}[-_]\d{2}[-_]\d{2}[-_]\d{2}[-_]\d{2})[^0-9]*', lambda d: datetime.strptime(d, '%Y-%m-%d-%H-%M-%S') if '-' in d else datetime.strptime(d, '%Y_%m_%d_%H_%M_%S')),  # YYYY-MM-DD-HH-MM-SS or YYYY_MM_DD_HH_MM_SS
+        (r'[^0-9]*(\d{8}_\d{6})[^0-9]*', lambda d: datetime.strptime(d, '%Y%m%d_%H%M%S')),  # YYYYMMDD_HHMMSS
+        (r'[^0-9]*(\d{14})[^0-9]*', lambda d: datetime.strptime(d, '%Y%m%d%H%M%S')),  # YYYYMMDDHHMMSS
+        (r'[^0-9]*(\d{4}[-_]\d{2}[-_]\d{2})[^0-9]*', lambda d: datetime.strptime(d, '%Y-%m-%d') if '-' in d else datetime.strptime(d, '%Y_%m_%d')),  # YYYY-MM-DD or YYYY_MM_DD
+        (r'[^0-9]*(\d{8})[^0-9]', lambda d: datetime.strptime(d, '%Y%m%d')),  # YYYYMMDD
     ]
-    
+
     for pattern, parser in date_patterns:
         match = re.search(pattern, filename)
         if match:
@@ -119,7 +118,7 @@ def validate_parsed_date(parsed_date):
     return parsed_date
 
 
-def organize_files(src_dir, dest_dir, dry_run=True, move=False, ignore_dirs=None):
+def organize_files(src_dir, dest_dir, dry_run=True, move=False, ignore_dirs=None, no_date_dir=None):
     # Clear the log file
 
     exif_batch_paths = []
@@ -137,29 +136,27 @@ def organize_files(src_dir, dest_dir, dry_run=True, move=False, ignore_dirs=None
                 if len(exif_batch_paths) >= EXIF_TOOL_BATCH_SIZE:
                     dates_taken = get_date_taken_batch(exif_batch_paths)
                     for path, date in zip(exif_batch_paths, dates_taken):
-                        process_file(path, date, dest_dir, dry_run, move,  dry_run_history)
+                        process_file(path, date, dest_dir, dry_run, move,  dry_run_history, no_date_dir)
                     exif_batch_paths.clear()
                 continue
             
-            process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_history)
+            process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_history, no_date_dir)
     
     # Process remaining files in the batch
     if exif_batch_paths:
         dates_taken = get_date_taken_batch(exif_batch_paths)
         for path, date in zip(exif_batch_paths, dates_taken):
-            process_file(path, date, dest_dir, dry_run, move,  dry_run_history)
+            process_file(path, date, dest_dir, dry_run, move,  dry_run_history, no_date_dir)
     
 
-def process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_history):
+def process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_history, no_date_dir):
     if not date_taken:
         stats["nodate"] += 1
-        print(f"nodate {file_path}")
-        return
-
-    year = date_taken.strftime('%Y')
-    month = date_taken.strftime('%m') + '-' + date_taken.strftime('%b').lower()
-    new_dir = os.path.join(dest_dir, year, month)
-    new_path = os.path.join(new_dir, os.path.basename(file_path))
+        new_dir = os.path.join(dest_dir, no_date_dir)
+        new_path = os.path.join(new_dir, os.path.basename(file_path))
+    else:
+        new_dir = os.path.join(dest_dir, date_taken.strftime('%Y'), date_taken.strftime('%m') + '-' + date_taken.strftime('%b').lower())
+        new_path = os.path.join(new_dir, os.path.basename(file_path))
 
     fixed_new_path = resolve_duplicate(new_path, file_path, dry_run_history)
     if new_path != fixed_new_path:
@@ -167,7 +164,7 @@ def process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_histor
     if not fixed_new_path:
         stats["duplicates"] += 1
         print(f"identical {file_path} to {new_path}")
-        if move:
+        if move and not dry_run:
             os.remove(file_path)
     else:
         stats["processed"] += 1
@@ -214,12 +211,13 @@ if __name__ == "__main__":
     parser.add_argument("--move", action="store_true", help="Move files instead of copying.")
     parser.add_argument("--log-file", default='ignored_files.log', help="Log file to record ignored files.")
     parser.add_argument("--ignore-dirs", action='append', help="Directory names to ignore.", default=[])
+    parser.add_argument("--no-date-dir", default='unknown-date', help="Log file to record ignored files.")
 
     args = parser.parse_args()
     
     #measure script execution duration
     start_time = datetime.now()
-    organize_files(args.src_dir, args.dest_dir, dry_run=args.dry_run, move=args.move, ignore_dirs=args.ignore_dirs)
+    organize_files(args.src_dir, args.dest_dir, dry_run=args.dry_run, move=args.move, ignore_dirs=args.ignore_dirs, no_date_dir = args.no_date_dir)
     #print execution duration
     end_time = datetime.now()
     execution_time = end_time - start_time
