@@ -82,13 +82,10 @@ def parse_filename(filename):
                 continue
     return None
 
-
 def path_exists(path, dry_run_history):
     if dry_run_history:
         return path in dry_run_history or os.path.exists(path)
     return os.path.exists(path)
-
-
 
 def resolve_duplicate(new_path, source_path, dry_run_history = None):
     base, extension = os.path.splitext(new_path)
@@ -106,56 +103,54 @@ def resolve_duplicate(new_path, source_path, dry_run_history = None):
         counter += 1
     return new_path
 
-def get_date_taken(filepath):
-    with ExifTool() as e:
-        metadata = e.get_metadata(filepath)
-        if metadata and len(metadata) > 0:
-            date_tags = ['EXIF:DateTimeOriginal', 'QuickTime:CreateDate', 'QuickTime:CreationDate']
-            metadata = metadata[0]
-            for tag in date_tags:
-                date_str = metadata.get(tag)
-                if date_str:
-                    try:
-                        return validate_parsed_date(datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S'))
-                    except ValueError:
-                        return None
+def get_date_taken(filepath, exiftool):
+    metadata = exiftool.get_metadata(filepath)
+    if metadata and len(metadata) > 0:
+        date_tags = ['EXIF:DateTimeOriginal', 'QuickTime:CreateDate', 'QuickTime:CreationDate']
+        metadata = metadata[0]
+        for tag in date_tags:
+            date_str = metadata.get(tag)
+            if date_str:
+                try:
+                    return validate_parsed_date(datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S'))
+                except ValueError:
+                    return None
     return None
 
 def validate_parsed_date(parsed_date):
     #TODO check if date is correct, > 1900 etc...
     return parsed_date
 
-
 def organize_files(src_dir, dest_dir, dry_run=True, move=False, ignore_dirs=None, no_date_dir=None):
     # Clear the log file
 
     exif_batch_paths = []
     dry_run_history = {} if dry_run else None # destination to source map
-    for root, dirs, files in os.walk(src_dir, topdown=True):
-        if ignore_dirs:
-            dirs[:] = [d for d in dirs if d not in ignore_dirs]
+    with ExifTool() as exiftool:
+        for root, dirs, files in os.walk(src_dir, topdown=True):
+            if ignore_dirs:
+                dirs[:] = [d for d in dirs if d not in ignore_dirs]
 
-        for filename in files:
-            file_path = os.path.join(root, filename)
-            date_taken = parse_filename(filename)
+            for filename in files:
+                file_path = os.path.join(root, filename)
+                date_taken = parse_filename(filename)
 
-            if not date_taken:
-                exif_batch_paths.append(file_path)
-                if len(exif_batch_paths) >= EXIF_TOOL_BATCH_SIZE:
-                    dates_taken = get_date_taken_batch(exif_batch_paths)
-                    for path, date in zip(exif_batch_paths, dates_taken):
-                        process_file(path, date, dest_dir, dry_run, move,  dry_run_history, no_date_dir)
-                    exif_batch_paths.clear()
-                continue
-            
-            process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_history, no_date_dir)
-    
-    # Process remaining files in the batch
-    if exif_batch_paths:
-        dates_taken = get_date_taken_batch(exif_batch_paths)
-        for path, date in zip(exif_batch_paths, dates_taken):
-            process_file(path, date, dest_dir, dry_run, move,  dry_run_history, no_date_dir)
-    
+                if not date_taken:
+                    exif_batch_paths.append(file_path)
+                    if len(exif_batch_paths) >= EXIF_TOOL_BATCH_SIZE:
+                        dates_taken = get_date_taken_batch(exif_batch_paths, exiftool)
+                        for path, date in zip(exif_batch_paths, dates_taken):
+                            process_file(path, date, dest_dir, dry_run, move,  dry_run_history, no_date_dir)
+                        exif_batch_paths.clear()
+                    continue
+                
+                process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_history, no_date_dir)
+        
+        # Process remaining files in the batch
+        if exif_batch_paths:
+            dates_taken = get_date_taken_batch(exif_batch_paths, exiftool)
+            for path, date in zip(exif_batch_paths, dates_taken):
+                process_file(path, date, dest_dir, dry_run, move,  dry_run_history, no_date_dir)
 
 def process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_history, no_date_dir):
     if not date_taken:
@@ -187,26 +182,23 @@ def process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_histor
             dry_run_history[fixed_new_path] = file_path
         print(f"{'move' if move else 'copy'} {file_path} to {fixed_new_path}")
 
-
-
-def get_date_taken_batch(filepaths):
+def get_date_taken_batch(filepaths, exiftool):
     dates_taken = []
-    with ExifTool() as e:
-        metadata_list = e.get_metadata(filepaths)
-        for metadata in metadata_list:
-            date_taken = None
-            date_tags = ['EXIF:DateTimeOriginal', 'QuickTime:CreateDate', 'QuickTime:CreationDate']
-            for tag in date_tags:
-                date_str = metadata.get(tag)
-                if date_str:
-                    try:
-                        date_taken = datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
-                    except ValueError:
-                        date_taken = None
-                    if date_taken:
-                        date_taken = validate_parsed_date(date_taken)
-                        break
-            dates_taken.append(date_taken)
+    metadata_list = exiftool.get_metadata(filepaths)
+    for metadata in metadata_list:
+        date_taken = None
+        date_tags = ['EXIF:DateTimeOriginal', 'QuickTime:CreateDate', 'QuickTime:CreationDate']
+        for tag in date_tags:
+            date_str = metadata.get(tag)
+            if date_str:
+                try:
+                    date_taken = datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
+                except ValueError:
+                    date_taken = None
+                if date_taken:
+                    date_taken = validate_parsed_date(date_taken)
+                    break
+        dates_taken.append(date_taken)
     return dates_taken
 
 if __name__ == "__main__":
@@ -218,7 +210,7 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Perform a dry run without making changes.")
     parser.add_argument("--move", action="store_true", help="Move files instead of copying.")
     parser.add_argument("--ignore-dirs", action='append', help="Directory names to ignore.", default=[])
-    parser.add_argument("--no-date-dir", default='unknown-date', help="Log file to record ignored files.")
+    parser.add_argument("--no-date-dir", default='unknown-date', help="Directory for files with no date.")
 
     args = parser.parse_args()
     
@@ -230,10 +222,8 @@ if __name__ == "__main__":
     execution_time = end_time - start_time
     print(f"Execution time: {execution_time}")
 
-
     #print stats
     print(f"Processed: {stats['processed']}")
     print(f"No Date: {stats['nodate']}")
     print(f"Duplicates: {stats['duplicates']}")
     print(f"Total: {stats['processed'] + stats['nodate'] + stats['duplicates']}")
-
