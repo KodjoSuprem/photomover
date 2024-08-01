@@ -82,13 +82,21 @@ def parse_filename(filename):
                 continue
     return None
 
+
+def path_exists(path, dry_run_history):
+    if dry_run_history:
+        return path in dry_run_history or os.path.exists(path)
+    return os.path.exists(path)
+
+
+
 def resolve_duplicate(new_path, source_path, dry_run_history = None):
     base, extension = os.path.splitext(new_path)
     counter = 1
-    while (dry_run_history and new_path in dry_run_history) or (not dry_run_history and os.path.exists(new_path)):
+    while path_exists(new_path, dry_run_history):
         ## compare files
         if dry_run_history:
-            dest_compare = dry_run_history[new_path]  # Get the source for comparison, because dry-run mode doesnt change file-system
+            dest_compare = dry_run_history.get(new_path, new_path)  # Get the source for comparison, because dry-run mode doesnt change file-system
         else:
             dest_compare = new_path
         if filecmp.cmp(source_path, dest_compare):  # check for identical files
