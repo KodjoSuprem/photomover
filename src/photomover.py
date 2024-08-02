@@ -69,9 +69,9 @@ def parse_filename(filename):
         (r'[^0-9]*(\d{8}_\d{6})[^0-9]*', lambda d: datetime.strptime(d, '%Y%m%d_%H%M%S')),  # YYYYMMDD_HHMMSS
         (r'[^0-9]*(\d{14})[^0-9]*', lambda d: datetime.strptime(d, '%Y%m%d%H%M%S')),  # YYYYMMDDHHMMSS
         (r'[^0-9]*(\d{4}[-_]\d{2}[-_]\d{2})[^0-9]*', lambda d: datetime.strptime(d, '%Y-%m-%d') if '-' in d else datetime.strptime(d, '%Y_%m_%d')),  # YYYY-MM-DD or YYYY_MM_DD
-        (r'[^0-9]*(\d{8})[^0-9]*', lambda d: datetime.strptime(d, '%Y%m%d')),  # YYYYMMDD
         (r'[^0-9]*(\d{13})[^0-9]*', lambda d: datetime.fromtimestamp(int(d) / 1000)),  # Unix timestamp (milliseconds)
         (r'[^0-9]*(\d{10})[^0-9]*', lambda d: datetime.fromtimestamp(int(d))),  # Unix timestamp (seconds)
+        (r'[^0-9]*(\d{8})[^0-9]*', lambda d: datetime.strptime(d, '%Y%m%d')),  # YYYYMMDD
     ]
 
     for pattern, parser in date_patterns:
