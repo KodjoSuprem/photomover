@@ -157,7 +157,7 @@ def process_file(file_path, date_taken, dest_dir, dry_run, move,  dry_run_histor
     if not fixed_new_path:
         stats["duplicates"] += 1
         print(f"identical {file_path} to {new_path}")
-        if move and not dry_run:
+        if move and not dry_run and file_path != new_path:
             os.remove(file_path)
     else:
         stats["processed"] += 1
