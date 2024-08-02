@@ -69,7 +69,9 @@ def parse_filename(filename):
         (r'[^0-9]*(\d{8}_\d{6})[^0-9]*', lambda d: datetime.strptime(d, '%Y%m%d_%H%M%S')),  # YYYYMMDD_HHMMSS
         (r'[^0-9]*(\d{14})[^0-9]*', lambda d: datetime.strptime(d, '%Y%m%d%H%M%S')),  # YYYYMMDDHHMMSS
         (r'[^0-9]*(\d{4}[-_]\d{2}[-_]\d{2})[^0-9]*', lambda d: datetime.strptime(d, '%Y-%m-%d') if '-' in d else datetime.strptime(d, '%Y_%m_%d')),  # YYYY-MM-DD or YYYY_MM_DD
-        (r'[^0-9]*(\d{8})[^0-9]', lambda d: datetime.strptime(d, '%Y%m%d')),  # YYYYMMDD
+        (r'[^0-9]*(\d{8})[^0-9]*', lambda d: datetime.strptime(d, '%Y%m%d')),  # YYYYMMDD
+        (r'[^0-9]*(\d{13})[^0-9]*', lambda d: datetime.fromtimestamp(int(d) / 1000)),  # Unix timestamp (milliseconds)
+        (r'[^0-9]*(\d{10})[^0-9]*', lambda d: datetime.fromtimestamp(int(d))),  # Unix timestamp (seconds)
     ]
 
     for pattern, parser in date_patterns:
@@ -103,22 +105,10 @@ def resolve_duplicate(new_path, source_path, dry_run_history = None):
         counter += 1
     return new_path
 
-def get_date_taken(filepath, exiftool):
-    metadata = exiftool.get_metadata(filepath)
-    if metadata and len(metadata) > 0:
-        date_tags = ['EXIF:DateTimeOriginal', 'QuickTime:CreateDate', 'QuickTime:CreationDate']
-        metadata = metadata[0]
-        for tag in date_tags:
-            date_str = metadata.get(tag)
-            if date_str:
-                try:
-                    return validate_parsed_date(datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S'))
-                except ValueError:
-                    return None
-    return None
 
 def validate_parsed_date(parsed_date):
-    #TODO check if date is correct, > 1900 etc...
+    if parsed_date.year <= 2000 or parsed_date.year > datetime.now().year:
+        return None
     return parsed_date
 
 def organize_files(src_dir, dest_dir, dry_run=True, move=False, ignore_dirs=None, no_date_dir=None):
