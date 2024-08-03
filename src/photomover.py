@@ -79,7 +79,7 @@ def parse_filename(filename):
         if match:
             date_str = match.group(1)
             try:
-                return parser(date_str)
+                return validate_parsed_date(parser(date_str))
             except ValueError:
                 continue
     return None
@@ -107,6 +107,8 @@ def resolve_duplicate(new_path, source_path, dry_run_history = None):
 
 
 def validate_parsed_date(parsed_date):
+    if not parsed_date:
+        return None
     if parsed_date.year <= 2000 or parsed_date.year > datetime.now().year:
         return None
     return parsed_date
@@ -124,7 +126,6 @@ def organize_files(src_dir, dest_dir, dry_run=True, move=False, ignore_dirs=None
             for filename in files:
                 file_path = os.path.join(root, filename)
                 date_taken = parse_filename(filename)
-
                 if not date_taken:
                     exif_batch_paths.append(file_path)
                     if len(exif_batch_paths) >= EXIF_TOOL_BATCH_SIZE:
